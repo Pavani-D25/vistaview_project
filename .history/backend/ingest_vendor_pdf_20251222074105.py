@@ -9,9 +9,6 @@ import sqlite3
 from pathlib import Path
 from PIL import Image
 import fitz  # PyMuPDF
-import json
-from fastapi import FastAPI, UploadFile, File, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
 
 # Directory setup
 BACKEND_DIR = Path(__file__).parent
@@ -232,20 +229,6 @@ def sync_to_frontend():
         dest = frontend_public / "collages" / col.name
         dest.write_bytes(col.read_bytes())
         col_count += 1
-
-    # +++ write static manifests for frontend fallback +++
-    try:
-        (frontend_public / "images" / "index.json").write_text(
-            json.dumps(sorted([p.name for p in (frontend_public / "images").glob("*.jpg")]), ensure_ascii=False),
-            encoding="utf-8",
-        )
-        (frontend_public / "collages" / "index.json").write_text(
-            json.dumps(sorted([p.name for p in (frontend_public / "collages").glob("*.jpg")]), ensure_ascii=False),
-            encoding="utf-8",
-        )
-        print("   ✓ Wrote images/index.json and collages/index.json")
-    except Exception as e:
-        print(f"⚠️  Warning: Could not write index.json manifests: {e}")
     
     print(f"   ✓ Copied {img_count} images and {col_count} collages")
 
@@ -311,53 +294,6 @@ def main():
     
     return 0
 
-
-# +++ FastAPI app exposing upload and media listing +++
-app = FastAPI(title="VistaView Backend")
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # adjust for prod
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-@app.get("/api/media")
-def api_media():
-    """Return lists of images and collages for the frontend"""
-    frontend_public = BACKEND_DIR.parent / "frontend" / "public"
-    images_dir = frontend_public / "images"
-    collages_dir = frontend_public / "collages"
-    images = sorted([p.name for p in images_dir.glob("*") if p.suffix.lower() in {".jpg",".jpeg",".png",".webp",".gif"}])
-    collages = sorted([p.name for p in collages_dir.glob("*") if p.suffix.lower() in {".jpg",".jpeg",".png",".webp",".gif"}])
-    return {"images": images, "collages": collages}
-
-@app.post("/api/upload")
-async def api_upload(file: UploadFile = File(...), bg: BackgroundTasks = None):
-    """Accept a PDF upload and trigger ingestion in the background"""
-    if not file.filename.lower().endswith(".pdf"):
-        return {"error": "Only PDF files are accepted."}
-    INPUT_DIR.mkdir(parents=True, exist_ok=True)
-    target = INPUT_DIR / "catalog.pdf"
-    data = await file.read()
-    target.write_bytes(data)
-    print(f"   ✓ Uploaded PDF saved to {target}")
-
-    def run_job():
-        try:
-            main()
-        except Exception as e:
-            print(f"❌ Ingestion failed: {e}")
-
-    if bg is not None:
-        bg.add_task(run_job)
-        return {"message": "Upload received. Ingestion started."}
-    else:
-        # Fallback: run synchronously
-        run_job()
-        return {"message": "Upload processed."}
-    
 
 if __name__ == "__main__":
     try:
