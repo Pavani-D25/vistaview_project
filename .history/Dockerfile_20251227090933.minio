@@ -1,0 +1,11 @@
+FROM minio/minio:latest
+
+# Install MinIO client
+RUN curl -o /usr/local/bin/mc https://dl.min.io/client/mc/release/linux-amd64/mc && \
+    chmod +x /usr/local/bin/mc
+
+# Copy entrypoint script
+COPY minio-entrypoint.sh /usr/local/bin/minio-entrypoint.sh
+RUN chmod +x /usr/local/bin/minio-entrypoint.sh
+
+ENTRYPOINT ["/usr/local/bin/minio-entrypoint.sh"]

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import axios from 'axios'
 import './ProductList.css'
 
@@ -11,7 +11,7 @@ function ProductList({ refreshTrigger, sessionId }) {
   const [page, setPage] = useState(0)
   const limit = 20
 
-  const fetchProducts = useCallback(async () => {
+  const fetchProducts = async () => {
     // Only fetch if sessionId exists (after upload)
     if (!sessionId) {
       setProducts([])
@@ -42,11 +42,11 @@ function ProductList({ refreshTrigger, sessionId }) {
     } finally {
       setLoading(false)
     }
-  }, [sessionId, page, searchQuery])
+  }
 
   useEffect(() => {
     fetchProducts()
-  }, [fetchProducts, refreshTrigger])
+  }, [page, searchQuery, refreshTrigger, sessionId])
 
   const handleSearch = (e) => {
     e.preventDefault()

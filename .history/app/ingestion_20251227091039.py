@@ -22,6 +22,16 @@ MIN_IMAGE_SIZE = 200  # Skip small logos/icons
 TILE_SIZE = 420  # Size of each tile in collage
 TILES_PER_ROW = 3
 
+# Directory setup
+BACKEND_DIR = Path(__file__).parent.parent / "backend"
+DATA_DIR = BACKEND_DIR / "data"
+IMAGES_BASE_DIR = DATA_DIR / "images"
+COLLAGES_BASE_DIR = DATA_DIR / "collages"
+
+# Ensure base directories exist
+IMAGES_BASE_DIR.mkdir(parents=True, exist_ok=True)
+COLLAGES_BASE_DIR.mkdir(parents=True, exist_ok=True)
+
 # Regex patterns
 SKU_RE = re.compile(r'\b([A-Z]{1,6}-?\d{1,6}[A-Z0-9]*)\b')
 DIMS_RE = re.compile(r'(\d{2,4})\s*[x×]\s*(\d{2,4})\s*[x×]\s*(\d{2,4})', re.IGNORECASE)
@@ -152,20 +162,27 @@ def create_collage(images: List[Dict], max_images: int = 6) -> Optional[Image.Im
     return collage
 
 
-def ingest_pdf(pdf_bytes: bytes, db: Session, pdf_filename: str = "catalog.pdf") -> Dict:
+def ingest_pdf(pdf_bytes: bytes, db: Session, pdf_filename: str = "catalog.pdf", use_minio: bool = False) -> Dict:
     """
-    Main PDF ingestion function - uploads images to MinIO
+    Main PDF ingestion function
     
     Args:
         pdf_bytes: PDF file content as bytes
         db: Database session
         pdf_filename: Original name of the PDF file
+        use_minio: Whether to upload images to MinIO (True) or store locally (False)
     
     Returns:
         Dictionary with ingestion statistics
     """
     # Create unique session ID for this upload
     session_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + str(uuid.uuid4())[:8]
+    
+    # Create session directories
+    session_images_dir = IMAGES_BASE_DIR / session_id
+    session_collages_dir = COLLAGES_BASE_DIR / session_id
+    session_images_dir.mkdir(parents=True, exist_ok=True)
+    session_collages_dir.mkdir(parents=True, exist_ok=True)
     
     print(f"\n📄 Processing PDF '{pdf_filename}' with {len(pdf_bytes)} bytes...")
     print(f"📁 Session folder: {session_id}")
@@ -203,30 +220,42 @@ def ingest_pdf(pdf_bytes: bytes, db: Session, pdf_filename: str = "catalog.pdf")
             # Generate unique product ID
             product_id = str(uuid.uuid4())
             
-            # Upload main image to MinIO
+            # Save/upload main image
             main_img = page_images[0]['pil']
             img_filename = f"{sku}_{page_num + 1}_main.jpg"
             
-            # Upload to MinIO with session prefix
-            img_buffer = BytesIO()
-            main_img.save(img_buffer, format='JPEG', quality=95)
-            img_buffer.seek(0)
-            image_key = f"images/{session_id}/{img_filename}"
-            upload_image(img_buffer.read(), image_key)
+            if use_minio:
+                # Upload to MinIO with session prefix
+                img_buffer = BytesIO()
+                main_img.save(img_buffer, format='JPEG', quality=95)
+                img_buffer.seek(0)
+                image_key = f"images/{session_id}/{img_filename}"
+                upload_image(img_buffer.read(), image_key)
+            else:
+                # Save locally
+                image_key = f"images/{session_id}/{img_filename}"
+                image_path = session_images_dir / img_filename
+                main_img.save(image_path, format='JPEG', quality=95)
             
-            # Create and upload collage to MinIO
+            # Create and save/upload collage
             collage_key = None
             if len(page_images) > 1:
                 collage = create_collage(page_images)
                 if collage:
                     collage_filename = f"{sku}_{page_num + 1}_collage.jpg"
                     
-                    # Upload to MinIO with session prefix
-                    collage_buffer = BytesIO()
-                    collage.save(collage_buffer, format='JPEG', quality=95)
-                    collage_buffer.seek(0)
-                    collage_key = f"collages/{session_id}/{collage_filename}"
-                    upload_image(collage_buffer.read(), collage_key)
+                    if use_minio:
+                        # Upload to MinIO with session prefix
+                        collage_buffer = BytesIO()
+                        collage.save(collage_buffer, format='JPEG', quality=95)
+                        collage_buffer.seek(0)
+                        collage_key = f"collages/{session_id}/{collage_filename}"
+                        upload_image(collage_buffer.read(), collage_key)
+                    else:
+                        # Save locally
+                        collage_key = f"collages/{session_id}/{collage_filename}"
+                        collage_path = session_collages_dir / collage_filename
+                        collage.save(collage_path, format='JPEG', quality=95)
                     
                     collages_created += 1
             
@@ -265,7 +294,8 @@ def ingest_pdf(pdf_bytes: bytes, db: Session, pdf_filename: str = "catalog.pdf")
     doc.close()
     
     print(f"\n✅ Ingestion complete: {products_created} products, {images_extracted} images, {collages_created} collages")
-    print(f"☁️  Images uploaded to MinIO bucket: vistaview-catalog")
+    if not use_minio:
+        print(f"📂 Images stored in: {session_images_dir}")
     
     return {
         'pages_processed': pages_processed,

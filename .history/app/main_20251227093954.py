@@ -2,12 +2,13 @@ import os
 from pathlib import Path
 from fastapi import FastAPI, UploadFile, File, Depends
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from .db import engine, get_db
 from .models import Base
 from .minio_client import ensure_bucket
 from .routes.products import router as products_router
-from .ingestion import ingest_pdf
+from .ingestion import ingest_pdf, DATA_DIR
 
 app = FastAPI(
     title="VistaView Catalog API",

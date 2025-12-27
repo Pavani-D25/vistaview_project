@@ -117,24 +117,33 @@ def upload_image(image_bytes: bytes, object_key: str, content_type: str = "image
 
 def presign_get(object_key: str, expires_seconds: int = 3600) -> str:
     """
-    Generate a public URL for MinIO objects
-    Since the bucket is publicly readable, we can use direct URLs
+    Generate a presigned URL that the browser can use
     
     Args:
         object_key: MinIO object key, e.g., "images/p001.jpg"
-        expires_seconds: Kept for compatibility but not used with public URLs
+        expires_seconds: How long the URL is valid (default 1 hour)
     
     Returns:
-        Full public URL to the object
+        Full presigned URL with query parameters
     """
     if not object_key:
         return None
     
     try:
-        # For publicly readable buckets, we can use direct URLs
-        # Format: http://localhost:9000/bucket-name/object-key
-        return f"{MINIO_PUBLIC_BASE_URL}/{MINIO_BUCKET}/{object_key}"
+        minio_client = get_client()
+        # Get presigned URL from MinIO
+        url = minio_client.presigned_get_object(
+            MINIO_BUCKET,
+            object_key,
+            expires=timedelta(seconds=expires_seconds),
+        )
+        
+        # Replace internal endpoint with public URL
+        # Example: http://minio:9000/bucket/key?X-Amz... 
+        #       → http://localhost:9000/bucket/key?X-Amz...
+        parsed = urlparse(url)
+        return f"{MINIO_PUBLIC_BASE_URL}{parsed.path}?{parsed.query}"
     except Exception as e:
-        print(f"⚠️  Failed to generate URL for {object_key}: {e}")
+        print(f"⚠️  Failed to generate presigned URL for {object_key}: {e}")
         # Return fallback static path
         return f"/static/{object_key}"

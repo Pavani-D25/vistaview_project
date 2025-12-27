@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import axios from 'axios'
 import './ProductList.css'
 
@@ -11,7 +11,7 @@ function ProductList({ refreshTrigger, sessionId }) {
   const [page, setPage] = useState(0)
   const limit = 20
 
-  const fetchProducts = useCallback(async () => {
+  const fetchProducts = async () => {
     // Only fetch if sessionId exists (after upload)
     if (!sessionId) {
       setProducts([])
@@ -42,11 +42,11 @@ function ProductList({ refreshTrigger, sessionId }) {
     } finally {
       setLoading(false)
     }
-  }, [sessionId, page, searchQuery])
+  }
 
   useEffect(() => {
     fetchProducts()
-  }, [fetchProducts, refreshTrigger])
+  }, [page, searchQuery, refreshTrigger, sessionId])
 
   const handleSearch = (e) => {
     e.preventDefault()
@@ -54,20 +54,6 @@ function ProductList({ refreshTrigger, sessionId }) {
   }
 
   const totalPages = Math.ceil(total / limit)
-
-  // Don't show anything if no session (before upload)
-  if (!sessionId) {
-    return (
-      <div className="product-list">
-        <div className="list-header">
-          <h2>📦 Product Catalog</h2>
-        </div>
-        <div className="empty-state">
-          <p>👆 Upload a PDF catalog above to see products!</p>
-        </div>
-      </div>
-    )
-  }
 
   if (loading && products.length === 0) {
     return (
@@ -87,32 +73,30 @@ function ProductList({ refreshTrigger, sessionId }) {
         </div>
       </div>
 
-      {sessionId && (
-        <form onSubmit={handleSearch} className="search-form">
-          <input
-            type="text"
-            placeholder="Search by SKU, name, or category..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="search-input"
-          />
-          <button type="submit" className="search-button">
-            🔍 Search
+      <form onSubmit={handleSearch} className="search-form">
+        <input
+          type="text"
+          placeholder="Search by SKU, name, or category..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="search-input"
+        />
+        <button type="submit" className="search-button">
+          🔍 Search
+        </button>
+        {searchQuery && (
+          <button
+            type="button"
+            onClick={() => {
+              setSearchQuery('')
+              setPage(0)
+            }}
+            className="clear-button"
+          >
+            Clear
           </button>
-          {searchQuery && (
-            <button
-              type="button"
-              onClick={() => {
-                setSearchQuery('')
-                setPage(0)
-              }}
-              className="clear-button"
-            >
-              Clear
-            </button>
-          )}
-        </form>
-      )}
+        )}
+      </form>
 
       {error && (
         <div className="error-message">

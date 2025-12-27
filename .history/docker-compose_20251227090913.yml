@@ -10,6 +10,7 @@ services:
       - ./backend/data:/app/backend/data
       - ./app:/app/app
     environment:
+      - MINIO_DISABLED=false
       - MINIO_ENDPOINT=minio:9000
       - MINIO_ACCESS_KEY=minio
       - MINIO_SECRET_KEY=minio12345
@@ -47,11 +48,6 @@ services:
       - "9001:9001"
     volumes:
       - minio_data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
 volumes:
   postgres_data:
